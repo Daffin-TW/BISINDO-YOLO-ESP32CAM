@@ -1,0 +1,5 @@
+ESP32_STREAM_URL = 'http://10.149.241.19:80/stream'
+
+MODEL_PATH = 'model/yolo_model.pt'
+
+CONFIDENCE_THRESHOLD = 0.5
