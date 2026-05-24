@@ -1,4 +1,4 @@
-ESP32_STREAM_URL = 'http://10.149.241.19:80/stream'
+ESP32_STREAM_URL = 'http://10.149.241.19:81'
 
 MODEL_PATH = 'model/yolo_model.pt'
 

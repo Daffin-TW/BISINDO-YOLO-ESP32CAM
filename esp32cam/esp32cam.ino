@@ -64,18 +64,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #define DEBOUNCE_MS          50
 #define DOUBLE_CLICK_MS     400   // max gap between clicks for double-click
-#define BATTERY_SAMPLE_MS   200   // interval between battery samples
-#define BATTERY_SAMPLE_CNT   10   // total samples
 #define WIFI_TIMEOUT_MS    20000  // 20 s WiFi connect timeout
 #define MSG_DISPLAY_MS      3000  // 3 s informational screens
 #define DISCONNECT_MSG_MS   2000  // 2 s "Disconnected" notice
 #define FAIL_MSG_MS         3000  // 3 s "Failed to Connect" notice
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BATTERY CONSTANTS
+//  TERY CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 #define BATT_V_MIN    3.0f   // 0 %
-#define BATT_V_MAX    4.2f   // 100 %
+#define BATT_V_MAX    4.0f   // 100 %
 #define BATT_R1      100000.0f
 #define BATT_R2      100000.0f
 #define ADC_REF_V     3.3f
@@ -124,9 +122,6 @@ SystemState  returnState     = STATE_STREAMING; // used after battery check
 // ---------- battery globals --------------------------------------------------
 float   batteryVoltage       = 0.0f;
 int     batteryPercent       = 0;
-unsigned long battSampleTimer = 0;
-int     battSampleCount      = 0;
-float   battSamples[BATTERY_SAMPLE_CNT];
 
 // ---------- WiFi globals -----------------------------------------------------
 String  storedSSID           = "";
@@ -175,12 +170,11 @@ void drawFailScreen();
 void drawChangeWifiScreen();
 void drawConnectedInfoScreen();
 void drawStreamingScreen();
-void drawBatteryCheckScreen();
+
 void drawDisconnectedScreen();
 
 void startBatteryReading();
-bool processBatterySamples();   // returns true when done
-float mediан(float* arr, int n);
+bool processBatterySamples();   // always returns true (single-sample)
 float rawToVoltage(int raw);
 
 bool initCamera();
@@ -225,6 +219,7 @@ void setup() {
   WiFi.mode(WIFI_OFF);
   delay(100); // small hardware settle
 
+  analogRead(BATTERY_PIN); // Initialize battery pin reading
   enterState(STATE_BOOT_BATTERY);
 }
 
@@ -311,8 +306,9 @@ void enterState(SystemState s) {
 
   switch (s) {
     case STATE_BOOT_BATTERY:
-      startBatteryReading();
       drawBootBatteryScreen();
+      delay(1000);
+      startBatteryReading();
       break;
 
     case STATE_WIFI_CONFIRM:
@@ -354,9 +350,8 @@ void enterState(SystemState s) {
       stopStreamServer();
       WiFi.disconnect(true);
       WiFi.mode(WIFI_OFF);
-      delay(350); // allow radio to fully shut down
       startBatteryReading();
-      drawBatteryCheckScreen();
+      delay(360); // for reading
       break;
 
     case STATE_DISCONNECTED_NOTICE:
@@ -447,39 +442,21 @@ void handleDisconnectedNotice() {
 // =============================================================================
 // BATTERY SUBSYSTEM
 // =============================================================================
+/**
+ * Take a single ADC sample, compute voltage and percentage immediately.
+ * WiFi MUST be OFF when this runs (ADC2 is shared with the radio).
+ */
 void startBatteryReading() {
-  battSampleCount = 0;
-  battSampleTimer = millis();
-  memset(battSamples, 0, sizeof(battSamples));
+  int raw         = analogRead(BATTERY_PIN);
+  batteryVoltage  = rawToVoltage(raw);
+  float clamped   = constrain(batteryVoltage, BATT_V_MIN, BATT_V_MAX);
+  batteryPercent  = (int)(((clamped - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN)) * 100.0f);
+  drawBatteryResult(); // show result on OLED immediately
 }
 
-/**
- * Call repeatedly from the state handler.
- * Takes one ADC sample every BATTERY_SAMPLE_MS ms.
- * Returns true when all samples collected and result computed.
- * WiFi MUST be OFF when this runs.
- */
+/** Always returns true – reading is done synchronously in startBatteryReading(). */
 bool processBatterySamples() {
-  if (battSampleCount >= BATTERY_SAMPLE_CNT) return true; // already done
-
-  if (millis() - battSampleTimer >= BATTERY_SAMPLE_MS) {
-    battSampleTimer = millis();
-
-    int raw = analogRead(BATTERY_PIN);
-    battSamples[battSampleCount++] = rawToVoltage(raw);
-
-    if (battSampleCount >= BATTERY_SAMPLE_CNT) {
-      // Compute median
-      batteryVoltage  = median(battSamples, BATTERY_SAMPLE_CNT);
-      // Clamp and convert to percentage
-      float clamped   = constrain(batteryVoltage, BATT_V_MIN, BATT_V_MAX);
-      batteryPercent  = (int)(((clamped - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN)) * 100.0f);
-
-      drawBatteryResult(); // update display immediately
-      return true;
-    }
-  }
-  return false;
+  return true;
 }
 
 /** Convert raw ADC reading → real battery voltage (voltage divider) */
@@ -487,21 +464,6 @@ float rawToVoltage(int raw) {
   float vADC = (raw / ADC_MAX) * ADC_REF_V;
   // Reverse voltage divider: Vbat = vADC * (R1+R2)/R2
   return vADC * ((BATT_R1 + BATT_R2) / BATT_R2);
-}
-
-/** Simple median – sorts a copy of the array */
-float median(float* arr, int n) {
-  float tmp[BATTERY_SAMPLE_CNT];
-  memcpy(tmp, arr, n * sizeof(float));
-  // Bubble sort (small n, fine here)
-  for (int i = 0; i < n - 1; i++) {
-    for (int j = 0; j < n - i - 1; j++) {
-      if (tmp[j] > tmp[j + 1]) {
-        float t = tmp[j]; tmp[j] = tmp[j + 1]; tmp[j + 1] = t;
-      }
-    }
-  }
-  return (n % 2 == 0) ? (tmp[n / 2 - 1] + tmp[n / 2]) / 2.0f : tmp[n / 2];
 }
 
 // =============================================================================
@@ -648,17 +610,6 @@ void drawStreamingScreen() {
   oled.display();
 }
 
-void drawBatteryCheckScreen() {
-  oled.clearDisplay();
-  oled.setTextSize(1);
-  oled.setTextColor(SH110X_WHITE);
-  oled.setCursor(10, 20);
-  oled.println("Battery Check...");
-  oled.setCursor(0, 38);
-  oled.printf("Sample %d/%d", battSampleCount, BATTERY_SAMPLE_CNT);
-  oled.display();
-}
-
 void drawDisconnectedScreen() {
   oled.clearDisplay();
   drawOledHeader();
@@ -699,7 +650,7 @@ bool initCamera() {
 
   // Start with lower res to save memory, configurable later
   cfg.frame_size    = FRAMESIZE_VGA;
-  cfg.jpeg_quality  = 12;
+  cfg.jpeg_quality  = 10;
   cfg.fb_count      = 2;
   cfg.grab_mode     = CAMERA_GRAB_WHEN_EMPTY;
   cfg.fb_location   = CAMERA_FB_IN_PSRAM;
