@@ -1,25 +1,184 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="id">
 <head>
-
-    <title>BISINDO Translator</title>
-
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='css/style.css') }}">
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem Penerjemah BISINDO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-
 <body>
 
-    <div class="container">
+<!-- ═══════════════════════════════════════════════════════════════
+     SIDEBAR
+════════════════════════════════════════════════════════════════ -->
+<aside class="sidebar">
 
-        <h1>BISINDO Translator</h1>
+  <div class="sidebar-brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <span class="brand-name">BISINDO</span>
+      <span class="brand-sub">Sign Language AI</span>
+    </div>
+  </div>
 
-        <img src="{{ url_for('video_feed') }}"
-             width="800">
+  <hr class="sidebar-divider">
+
+  <!-- Device Status -->
+  <div class="sidebar-section">
+    <p class="section-label">PERANGKAT</p>
+
+    <div class="stat-card">
+      <div class="stat-icon stat-icon--status">
+        <span class="status-dot" id="statusDot"></span>
+      </div>
+      <div class="stat-body">
+        <p class="stat-label">Status</p>
+        <p class="stat-value" id="statusText">Tidak Terhubung</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      </div>
+      <div class="stat-body">
+        <p class="stat-label">Latensi</p>
+        <p class="stat-value"><span id="latency">--</span> ms</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      </div>
+      <div class="stat-body">
+        <p class="stat-label">Frame Rate</p>
+        <p class="stat-value"><span id="fps">--</span> FPS</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <div class="stat-body">
+        <p class="stat-label">Waktu Aktif</p>
+        <p class="stat-value" id="activeTime">00:00:00</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/></svg>
+      </div>
+      <div class="stat-body">
+        <p class="stat-label">Baterai</p>
+        <p class="stat-value" id="battery">--</p>
+      </div>
+    </div>
+  </div>
+
+  <hr class="sidebar-divider">
+
+  <!-- Last Detection -->
+  <div class="sidebar-section">
+    <p class="section-label">DETEKSI TERAKHIR</p>
+    <div class="detection-badge" id="detectionBadge">
+      <span id="detectionLabel">–</span>
+    </div>
+  </div>
+
+  <hr class="sidebar-divider">
+
+  <!-- Controls -->
+  <div class="sidebar-section sidebar-section--controls">
+    <p class="section-label">KONTROL</p>
+    <button class="btn-stream btn-stream--start" id="toggleBtn" onclick="toggleStream()">
+      <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Mulai Stream
+    </button>
+    <p class="control-hint" id="controlHint">Tekan untuk memulai inferensi</p>
+  </div>
+
+</aside>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MAIN CONTENT
+════════════════════════════════════════════════════════════════ -->
+<main class="main">
+
+  <header class="topbar">
+    <div class="topbar-title">
+      <h1>SISTEM PENERJEMAH BAHASA ISYARAT INDONESIA</h1>
+      <p class="topbar-sub">Real-time BISINDO Sign Language Recognition</p>
+    </div>
+    <div class="topbar-badge">
+      <span class="badge-dot" id="topbarDot"></span>
+      <span id="topbarStatus">Offline</span>
+    </div>
+  </header>
+
+  <!-- Video area -->
+  <div class="video-wrapper">
+    <div class="video-container" id="videoContainer">
+
+      <!-- Live feed -->
+      <img id="videoFeed"
+           class="video-feed"
+           src="{{ url_for('video_feed') }}"
+           alt="Live Camera Feed">
+
+      <!-- Overlay: not streaming -->
+      <div class="video-overlay" id="videoOverlay">
+        <div class="overlay-content">
+          <div class="overlay-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M15 10l4.553-2.275A1 1 0 0121 8.607v6.786a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+            </svg>
+          </div>
+          <p class="overlay-title">Stream Belum Aktif</p>
+          <p class="overlay-sub">Tekan "Mulai Stream" untuk memulai</p>
+        </div>
+      </div>
+
+      <!-- Corner HUD badges -->
+      <div class="hud hud--tl" id="hudFps">-- FPS</div>
+      <div class="hud hud--tr" id="hudLatency">-- ms</div>
 
     </div>
 
+    <!-- Subtitle / translation result -->
+    <div class="subtitle-bar" id="subtitleBar">
+      <span class="subtitle-icon">✦</span>
+      <span class="subtitle-text" id="subtitleText">Menunggu deteksi…</span>
+    </div>
+  </div>
+
+  <!-- Info footer -->
+  <footer class="info-footer">
+    <div class="info-item">
+      <span class="info-dot"></span>
+      Model: YOLOv8 — BISINDO Dataset
+    </div>
+    <div class="info-item">
+      <span class="info-dot"></span>
+      Kelas: 56 label isyarat
+    </div>
+    <div class="info-item">
+      <span class="info-dot"></span>
+      Output: OLED + DFPlayer Audio
+    </div>
+  </footer>
+
+</main>
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
 </html>
