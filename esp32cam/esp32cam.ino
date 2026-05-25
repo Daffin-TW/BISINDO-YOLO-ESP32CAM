@@ -17,136 +17,168 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // INCLUDES
 // ─────────────────────────────────────────────────────────────────────────────
-#include <Arduino.h>
-#include <Wire.h>
-#include <WiFi.h>
-#include <WebServer.h>
-#include <Preferences.h>
-#include <esp_camera.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SH110X.h>   // SH1106G driver
+#include <Adafruit_SH110X.h> // SH1106G driver
+#include <Arduino.h>
+#include <Preferences.h>
+#include <WebServer.h>
+#include <WiFi.h>
+#include <Wire.h>
+#include <esp_camera.h>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PIN DEFINITIONS
 // ─────────────────────────────────────────────────────────────────────────────
-#define BUTTON_PIN      13
-#define BATTERY_PIN     14   // ADC2 – only readable when WiFi is OFF
+#define BUTTON_PIN 13
+#define BATTERY_PIN 14 // ADC2 – only readable when WiFi is OFF
 
 // OLED I2C Pins (via Wire.begin)
-#define OLED_SDA        15
-#define OLED_SCL        2
-#define OLED_I2C_ADDR   0x3C
-#define OLED_WIDTH      128
-#define OLED_HEIGHT     64
+#define OLED_SDA 15
+#define OLED_SCL 2
+#define OLED_I2C_ADDR 0x3C
+#define OLED_WIDTH 128
+#define OLED_HEIGHT 64
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CAMERA PIN MAP – AI Thinker / OV2640
 // ─────────────────────────────────────────────────────────────────────────────
-#define PWDN_GPIO_NUM   32
-#define RESET_GPIO_NUM  -1
-#define XCLK_GPIO_NUM    0
-#define SIOD_GPIO_NUM   26
-#define SIOC_GPIO_NUM   27
-#define Y9_GPIO_NUM     35
-#define Y8_GPIO_NUM     34
-#define Y7_GPIO_NUM     39
-#define Y6_GPIO_NUM     36
-#define Y5_GPIO_NUM     21
-#define Y4_GPIO_NUM     19
-#define Y3_GPIO_NUM     18
-#define Y2_GPIO_NUM      5
-#define VSYNC_GPIO_NUM  25
-#define HREF_GPIO_NUM   23
-#define PCLK_GPIO_NUM   22
+#define PWDN_GPIO_NUM 32
+#define RESET_GPIO_NUM -1
+#define XCLK_GPIO_NUM 0
+#define SIOD_GPIO_NUM 26
+#define SIOC_GPIO_NUM 27
+#define Y9_GPIO_NUM 35
+#define Y8_GPIO_NUM 34
+#define Y7_GPIO_NUM 39
+#define Y6_GPIO_NUM 36
+#define Y5_GPIO_NUM 21
+#define Y4_GPIO_NUM 19
+#define Y3_GPIO_NUM 18
+#define Y2_GPIO_NUM 5
+#define VSYNC_GPIO_NUM 25
+#define HREF_GPIO_NUM 23
+#define PCLK_GPIO_NUM 22
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIMING CONSTANTS (ms)
 // ─────────────────────────────────────────────────────────────────────────────
-#define DEBOUNCE_MS          50
-#define DOUBLE_CLICK_MS     400   // max gap between clicks for double-click
-#define WIFI_TIMEOUT_MS    20000  // 20 s WiFi connect timeout
-#define MSG_DISPLAY_MS      3000  // 3 s informational screens
-#define DISCONNECT_MSG_MS   2000  // 2 s "Disconnected" notice
-#define FAIL_MSG_MS         3000  // 3 s "Failed to Connect" notice
+#define DEBOUNCE_MS 50
+#define DOUBLE_CLICK_MS 400    // max gap between clicks for double-click
+#define WIFI_TIMEOUT_MS 20000  // 20 s WiFi connect timeout
+#define MSG_DISPLAY_MS 3000    // 3 s informational screens
+#define DISCONNECT_MSG_MS 2000 // 2 s "Disconnected" notice
+#define FAIL_MSG_MS 3000       // 3 s "Failed to Connect" notice
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  TERY CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-#define BATT_V_MIN    3.0f   // 0 %
-#define BATT_V_MAX    4.0f   // 100 %
-#define BATT_R1      100000.0f
-#define BATT_R2      100000.0f
-#define ADC_REF_V     3.3f
-#define ADC_MAX      4095.0f
+#define BATT_V_MIN 3.0f // 0 %
+#define BATT_V_MAX 4.0f // 100 %
+#define BATT_R1 100000.0f
+#define BATT_R2 100000.0f
+#define ADC_REF_V 3.3f
+#define ADC_MAX 4095.0f
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACCESS POINT CREDENTIALS
 // ─────────────────────────────────────────────────────────────────────────────
 #define AP_SSID "BISINDO ESP"
-#define AP_PORT  80
+#define AP_PORT 80
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BISINDO LABEL TABLE  (derived from label_info.txt, keys 1–56)
+// ─────────────────────────────────────────────────────────────────────────────
+#define LABEL_COUNT 56
+static const char *const LABEL_TEXT[LABEL_COUNT + 1] = {
+    "", // 0 – unused
+    "A",     "B",         "C",
+    "D",     "E",         "F",
+    "G",     "H",         "I",
+    "J",     "K",         "L",
+    "M", // 1-13
+    "N",     "O",         "P",
+    "Q",     "R",         "S",
+    "T",     "U",         "V",
+    "W",     "X",         "Y",
+    "Z", // 14-26
+    "apa",   "ayah",      "cinta",
+    "halo",  "hati hati", // 27-31
+    "ibu",   "jangan",    "kakak",
+    "kakek", "kamu",      "kerja",
+    "maaf", // 32-38
+    "makan", "marah",     "minum",
+    "mobil", "motor",     "nenek", // 39-44
+    "rumah", "sahabat",   "sakit",
+    "saya",  "sedih",     "senang", // 45-50
+    "siapa", "takut",     "terima kasih",
+    "tidur", "tolong",    "uang" // 51-56
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE MACHINE
 // ─────────────────────────────────────────────────────────────────────────────
 enum SystemState {
-  STATE_BOOT_BATTERY,       // 0: reading battery before WiFi
-  STATE_WIFI_CONFIRM,       // 1: "Connect to <ssid>?" screen
-  STATE_WIFI_CONNECTING,    // 2: attempting connection
-  STATE_WIFI_FAIL,          // 3: "Failed to connect" (timed)
-  STATE_CHANGE_WIFI,        // 4: AP mode + web form
-  STATE_WIFI_CONNECTED_INFO,// 5: "Connected!" info screen (3 s)
-  STATE_STREAMING,          // 6: camera HTTP stream active
-  STATE_BATTERY_CHECK,      // 7: mid-session battery read
-  STATE_DISCONNECTED_NOTICE // 8: "Disconnected" notice (2 s)
+  STATE_BOOT_BATTERY,        // 0: reading battery before WiFi
+  STATE_WIFI_CONFIRM,        // 1: "Connect to <ssid>?" screen
+  STATE_WIFI_CONNECTING,     // 2: attempting connection
+  STATE_WIFI_FAIL,           // 3: "Failed to connect" (timed)
+  STATE_CHANGE_WIFI,         // 4: AP mode + web form
+  STATE_WIFI_CONNECTED_INFO, // 5: "Connected!" info screen (3 s)
+  STATE_STREAMING,           // 6: camera HTTP stream active
+  STATE_BATTERY_CHECK,       // 7: mid-session battery read
+  STATE_DISCONNECTED_NOTICE  // 8: "Disconnected" notice (2 s)
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BUTTON EVENT
 // ─────────────────────────────────────────────────────────────────────────────
-enum ButtonEvent {
-  BTN_NONE,
-  BTN_SINGLE,
-  BTN_DOUBLE
-};
+enum ButtonEvent { BTN_NONE, BTN_SINGLE, BTN_DOUBLE };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GLOBALS
 // ─────────────────────────────────────────────────────────────────────────────
 Adafruit_SH1106G oled(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
-Preferences       prefs;
-WebServer*        webServer = nullptr;
+Preferences prefs;
+WebServer *webServer = nullptr;
 
-SystemState  currentState    = STATE_BOOT_BATTERY;
-SystemState  returnState     = STATE_STREAMING; // used after battery check
+SystemState currentState = STATE_BOOT_BATTERY;
+SystemState returnState = STATE_STREAMING; // used after battery check
 
 // ---------- battery globals --------------------------------------------------
-float   batteryVoltage       = 0.0f;
-int     batteryPercent       = 0;
+float batteryVoltage = 0.0f;
+int batteryPercent = 0;
 
 // ---------- WiFi globals -----------------------------------------------------
-String  storedSSID           = "";
-String  storedPass           = "";
-unsigned long wifiTimer      = 0;
+String storedSSID = "";
+String storedPass = "";
+unsigned long wifiTimer = 0;
 
 // ---------- state timer (generic) -------------------------------------------
-unsigned long stateTimer     = 0;
+unsigned long stateTimer = 0;
 
 // ---------- camera -----------------------------------------------------------
-bool    cameraInitialized    = false;
-bool    serverRunning        = false;
+bool cameraInitialized = false;
+bool serverRunning = false;
 
 // ---------- streaming task ---------------------------------------------------
-TaskHandle_t    streamTaskHandle = nullptr;
-volatile bool   streamTaskStop   = false;
+TaskHandle_t streamTaskHandle = nullptr;
+volatile bool streamTaskStop = false;
+
+// ---------- label communication ----------------------------------------------
+volatile int receivedLabelId =
+    -1;                       // written by HTTP handler, consumed in loop()
+String currentLabelText = ""; // last confirmed label text
+unsigned long labelDisplayTimer = 0; // millis() when label screen was shown
+bool labelShowing = false;           // true while label overrides stream screen
 
 // ---------- button -----------------------------------------------------------
-bool    lastButtonRaw        = HIGH;
-bool    buttonState          = HIGH;
-unsigned long debounceTimer  = 0;
+bool lastButtonRaw = HIGH;
+bool buttonState = HIGH;
+unsigned long debounceTimer = 0;
 
-int     clickCount           = 0;
-unsigned long lastClickTime  = 0;
-bool    waitingDoubleClick   = false;
+int clickCount = 0;
+unsigned long lastClickTime = 0;
+bool waitingDoubleClick = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FORWARD DECLARATIONS
@@ -174,16 +206,24 @@ void drawStreamingScreen();
 void drawDisconnectedScreen();
 
 void startBatteryReading();
-bool processBatterySamples();   // always returns true (single-sample)
+bool processBatterySamples(); // always returns true (single-sample)
 float rawToVoltage(int raw);
 
 bool initCamera();
 void startStreamServer();
 void stopStreamServer();
-void streamingTask(void* pvParameters);  // FreeRTOS task for MJPEG stream
+void streamingTask(void *pvParameters); // FreeRTOS task for MJPEG stream
 void handleCamConfigPage();
 void handleCamConfigSave();
 void handleRoot();
+void handleLabelPost();
+void handleLabelGet();
+void drawLabelScreen(const String &text);
+const char *labelIdToText(int id);
+
+void initDFPlayer();
+void dfPlayerCmd(uint8_t cmd, uint8_t param1, uint8_t param2);
+void playLabelAudio(int trackNum);
 
 void startAPMode();
 void stopAPMode();
@@ -192,7 +232,7 @@ void handleAPSave();
 
 ButtonEvent pollButton();
 void loadCredentials();
-void saveCredentials(const String& ssid, const String& pass);
+void saveCredentials(const String &ssid, const String &pass);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SETUP
@@ -219,6 +259,9 @@ void setup() {
   WiFi.mode(WIFI_OFF);
   delay(100); // small hardware settle
 
+  // --- DFPlayer Mini (UART0: TX=GPIO1, RX=GPIO3) ---
+  initDFPlayer();
+
   analogRead(BATTERY_PIN); // Initialize battery pin reading
   enterState(STATE_BOOT_BATTERY);
 }
@@ -230,69 +273,87 @@ void loop() {
   ButtonEvent btn = pollButton();
 
   switch (currentState) {
-    case STATE_BOOT_BATTERY:        handleBootBattery();        break;
-    case STATE_WIFI_CONFIRM:        handleWifiConfirm();        break;
-    case STATE_WIFI_CONNECTING:     handleWifiConnecting();     break;
-    case STATE_WIFI_FAIL:           handleWifiFail();           break;
-    case STATE_CHANGE_WIFI:         handleChangeWifi();         break;
-    case STATE_WIFI_CONNECTED_INFO: handleWifiConnectedInfo();  break;
-    case STATE_STREAMING:           handleStreaming();          break;
-    case STATE_BATTERY_CHECK:       handleBatteryCheck();       break;
-    case STATE_DISCONNECTED_NOTICE: handleDisconnectedNotice(); break;
+  case STATE_BOOT_BATTERY:
+    handleBootBattery();
+    break;
+  case STATE_WIFI_CONFIRM:
+    handleWifiConfirm();
+    break;
+  case STATE_WIFI_CONNECTING:
+    handleWifiConnecting();
+    break;
+  case STATE_WIFI_FAIL:
+    handleWifiFail();
+    break;
+  case STATE_CHANGE_WIFI:
+    handleChangeWifi();
+    break;
+  case STATE_WIFI_CONNECTED_INFO:
+    handleWifiConnectedInfo();
+    break;
+  case STATE_STREAMING:
+    handleStreaming();
+    break;
+  case STATE_BATTERY_CHECK:
+    handleBatteryCheck();
+    break;
+  case STATE_DISCONNECTED_NOTICE:
+    handleDisconnectedNotice();
+    break;
   }
 
   // Process button events (centralised for states that care)
   if (btn != BTN_NONE) {
     switch (currentState) {
-      // ── WiFi Confirm ──────────────────────────────────────────────────────
-      case STATE_WIFI_CONFIRM:
-        if (btn == BTN_SINGLE) {
-          enterState(STATE_WIFI_CONNECTING);
-        } else if (btn == BTN_DOUBLE) {
-          enterState(STATE_CHANGE_WIFI);
-        }
-        break;
+    // ── WiFi Confirm ──────────────────────────────────────────────────────
+    case STATE_WIFI_CONFIRM:
+      if (btn == BTN_SINGLE) {
+        enterState(STATE_WIFI_CONNECTING);
+      } else if (btn == BTN_DOUBLE) {
+        enterState(STATE_CHANGE_WIFI);
+      }
+      break;
 
-      // ── Change WiFi (AP) – single = cancel ───────────────────────────────
-      case STATE_CHANGE_WIFI:
-        if (btn == BTN_SINGLE) {
-          stopAPMode();
-          enterState(STATE_WIFI_CONFIRM);
-        }
-        break;
+    // ── Change WiFi (AP) – single = cancel ───────────────────────────────
+    case STATE_CHANGE_WIFI:
+      if (btn == BTN_SINGLE) {
+        stopAPMode();
+        enterState(STATE_WIFI_CONFIRM);
+      }
+      break;
 
-      // ── WiFi Connected Info – single=battery, double=change wifi ─────────
-      case STATE_WIFI_CONNECTED_INFO:
-        if (btn == BTN_SINGLE) {
-          returnState = STATE_STREAMING; // after battery, go streaming
-          enterState(STATE_BATTERY_CHECK);
-        } else if (btn == BTN_DOUBLE) {
-          stopStreamServer();
-          WiFi.disconnect(true);
-          WiFi.mode(WIFI_OFF);
-          enterState(STATE_WIFI_CONFIRM);
-        }
-        break;
+    // ── WiFi Connected Info – single=battery, double=change wifi ─────────
+    case STATE_WIFI_CONNECTED_INFO:
+      if (btn == BTN_SINGLE) {
+        returnState = STATE_STREAMING; // after battery, go streaming
+        enterState(STATE_BATTERY_CHECK);
+      } else if (btn == BTN_DOUBLE) {
+        stopStreamServer();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        enterState(STATE_WIFI_CONFIRM);
+      }
+      break;
 
-      // ── Streaming – single=battery check, double=change wifi ─────────────
-      case STATE_STREAMING:
-        if (btn == BTN_SINGLE) {
-          stopStreamServer();
-          WiFi.disconnect(true);
-          WiFi.mode(WIFI_OFF);
-          delay(100);
-          returnState = STATE_STREAMING;
-          enterState(STATE_BATTERY_CHECK);
-        } else if (btn == BTN_DOUBLE) {
-          stopStreamServer();
-          WiFi.disconnect(true);
-          WiFi.mode(WIFI_OFF);
-          enterState(STATE_WIFI_CONFIRM);
-        }
-        break;
+    // ── Streaming – single=battery check, double=change wifi ─────────────
+    case STATE_STREAMING:
+      if (btn == BTN_SINGLE) {
+        stopStreamServer();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        delay(100);
+        returnState = STATE_STREAMING;
+        enterState(STATE_BATTERY_CHECK);
+      } else if (btn == BTN_DOUBLE) {
+        stopStreamServer();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        enterState(STATE_WIFI_CONFIRM);
+      }
+      break;
 
-      default:
-        break;
+    default:
+      break;
     }
   }
 }
@@ -302,61 +363,61 @@ void loop() {
 // =============================================================================
 void enterState(SystemState s) {
   currentState = s;
-  stateTimer   = millis();
+  stateTimer = millis();
 
   switch (s) {
-    case STATE_BOOT_BATTERY:
-      drawBootBatteryScreen();
-      delay(1000);
-      startBatteryReading();
-      break;
+  case STATE_BOOT_BATTERY:
+    drawBootBatteryScreen();
+    delay(1000);
+    startBatteryReading();
+    break;
 
-    case STATE_WIFI_CONFIRM:
-      drawWifiConfirmScreen();
-      break;
+  case STATE_WIFI_CONFIRM:
+    drawWifiConfirmScreen();
+    break;
 
-    case STATE_WIFI_CONNECTING:
-      wifiTimer = millis();
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(storedSSID.c_str(), storedPass.c_str());
-      drawConnectingScreen();
-      break;
+  case STATE_WIFI_CONNECTING:
+    wifiTimer = millis();
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(storedSSID.c_str(), storedPass.c_str());
+    drawConnectingScreen();
+    break;
 
-    case STATE_WIFI_FAIL:
-      drawFailScreen();
-      break;
+  case STATE_WIFI_FAIL:
+    drawFailScreen();
+    break;
 
-    case STATE_CHANGE_WIFI:
-      startAPMode();
-      drawChangeWifiScreen();
-      break;
+  case STATE_CHANGE_WIFI:
+    startAPMode();
+    drawChangeWifiScreen();
+    break;
 
-    case STATE_WIFI_CONNECTED_INFO:
-      drawConnectedInfoScreen();
-      break;
+  case STATE_WIFI_CONNECTED_INFO:
+    drawConnectedInfoScreen();
+    break;
 
-    case STATE_STREAMING:
-      if (!cameraInitialized) {
-        cameraInitialized = initCamera();
-      }
-      if (cameraInitialized) {
-        startStreamServer();
-      }
-      drawStreamingScreen();
-      break;
+  case STATE_STREAMING:
+    if (!cameraInitialized) {
+      cameraInitialized = initCamera();
+    }
+    if (cameraInitialized) {
+      startStreamServer();
+    }
+    drawStreamingScreen();
+    break;
 
-    case STATE_BATTERY_CHECK:
-      // WiFi must be off before reading ADC2
-      stopStreamServer();
-      WiFi.disconnect(true);
-      WiFi.mode(WIFI_OFF);
-      startBatteryReading();
-      delay(360); // for reading
-      break;
+  case STATE_BATTERY_CHECK:
+    // WiFi must be off before reading ADC2
+    stopStreamServer();
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    startBatteryReading();
+    delay(360); // for reading
+    break;
 
-    case STATE_DISCONNECTED_NOTICE:
-      drawDisconnectedScreen();
-      break;
+  case STATE_DISCONNECTED_NOTICE:
+    drawDisconnectedScreen();
+    break;
   }
 }
 
@@ -399,7 +460,8 @@ void handleWifiFail() {
 
 // ── STATE 4: Change WiFi (AP mode) ──────────────────────────────────────────
 void handleChangeWifi() {
-  if (webServer) webServer->handleClient();
+  if (webServer)
+    webServer->handleClient();
 }
 
 // ── STATE 5: WiFi Connected Info ─────────────────────────────────────────────
@@ -412,7 +474,26 @@ void handleWifiConnectedInfo() {
 
 // ── STATE 6: Camera Streaming ────────────────────────────────────────────────
 void handleStreaming() {
-  if (webServer) webServer->handleClient();
+  if (webServer)
+    webServer->handleClient();
+
+  // Process incoming label from web UI (set by handleLabelPost on this same
+  // core)
+  if (receivedLabelId >= 0) {
+    int id = receivedLabelId;
+    receivedLabelId = -1; // clear flag immediately
+    currentLabelText = labelIdToText(id);
+    labelShowing = true;
+    labelDisplayTimer = millis();
+    drawLabelScreen(currentLabelText); // update OLED
+    playLabelAudio(id);                // play audio via DFPlayer
+  }
+
+  // Auto-revert OLED to streaming screen after 3 s
+  if (labelShowing && (millis() - labelDisplayTimer > 3000)) {
+    labelShowing = false;
+    drawStreamingScreen();
+  }
 
   // Monitor WiFi health
   if (WiFi.status() != WL_CONNECTED) {
@@ -432,7 +513,8 @@ void handleBatteryCheck() {
   }
 }
 
-// ── STATE 8: Disconnected Notice ──────────────────────────────────────────────
+// ── STATE 8: Disconnected Notice
+// ──────────────────────────────────────────────
 void handleDisconnectedNotice() {
   if (millis() - stateTimer > DISCONNECT_MSG_MS) {
     enterState(STATE_WIFI_CONNECTING);
@@ -447,17 +529,17 @@ void handleDisconnectedNotice() {
  * WiFi MUST be OFF when this runs (ADC2 is shared with the radio).
  */
 void startBatteryReading() {
-  int raw         = analogRead(BATTERY_PIN);
-  batteryVoltage  = rawToVoltage(raw);
-  float clamped   = constrain(batteryVoltage, BATT_V_MIN, BATT_V_MAX);
-  batteryPercent  = (int)(((clamped - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN)) * 100.0f);
+  int raw = analogRead(BATTERY_PIN);
+  batteryVoltage = rawToVoltage(raw);
+  float clamped = constrain(batteryVoltage, BATT_V_MIN, BATT_V_MAX);
+  batteryPercent =
+      (int)(((clamped - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN)) * 100.0f);
   drawBatteryResult(); // show result on OLED immediately
 }
 
-/** Always returns true – reading is done synchronously in startBatteryReading(). */
-bool processBatterySamples() {
-  return true;
-}
+/** Always returns true – reading is done synchronously in
+ * startBatteryReading(). */
+bool processBatterySamples() { return true; }
 
 /** Convert raw ADC reading → real battery voltage (voltage divider) */
 float rawToVoltage(int raw) {
@@ -522,7 +604,8 @@ void drawWifiConfirmScreen() {
   oled.setCursor(0, 22);
   // Truncate SSID to fit screen
   String ssidDisp = storedSSID.isEmpty() ? "(none)" : storedSSID;
-  if (ssidDisp.length() > 16) ssidDisp = ssidDisp.substring(0, 14) + "..";
+  if (ssidDisp.length() > 16)
+    ssidDisp = ssidDisp.substring(0, 14) + "..";
   oled.println(ssidDisp);
   oled.setCursor(0, 36);
   oled.println("1x: yes");
@@ -540,7 +623,8 @@ void drawConnectingScreen() {
   oled.println("Connecting to:");
   oled.setCursor(0, 22);
   String ssidDisp = storedSSID;
-  if (ssidDisp.length() > 16) ssidDisp = ssidDisp.substring(0, 14) + "..";
+  if (ssidDisp.length() > 16)
+    ssidDisp = ssidDisp.substring(0, 14) + "..";
   oled.println(ssidDisp);
   oled.setCursor(0, 40);
   oled.println("Please wait...");
@@ -583,7 +667,8 @@ void drawConnectedInfoScreen() {
   oled.setCursor(0, 12);
   oled.println("Connected to:");
   String ssidDisp = storedSSID;
-  if (ssidDisp.length() > 16) ssidDisp = ssidDisp.substring(0, 14) + "..";
+  if (ssidDisp.length() > 16)
+    ssidDisp = ssidDisp.substring(0, 14) + "..";
   oled.setCursor(0, 22);
   oled.println(ssidDisp);
   oled.setCursor(0, 36);
@@ -627,33 +712,33 @@ void drawDisconnectedScreen() {
 // =============================================================================
 bool initCamera() {
   camera_config_t cfg;
-  cfg.ledc_channel  = LEDC_CHANNEL_0;
-  cfg.ledc_timer    = LEDC_TIMER_0;
-  cfg.pin_d0        = Y2_GPIO_NUM;
-  cfg.pin_d1        = Y3_GPIO_NUM;
-  cfg.pin_d2        = Y4_GPIO_NUM;
-  cfg.pin_d3        = Y5_GPIO_NUM;
-  cfg.pin_d4        = Y6_GPIO_NUM;
-  cfg.pin_d5        = Y7_GPIO_NUM;
-  cfg.pin_d6        = Y8_GPIO_NUM;
-  cfg.pin_d7        = Y9_GPIO_NUM;
-  cfg.pin_xclk      = XCLK_GPIO_NUM;
-  cfg.pin_pclk      = PCLK_GPIO_NUM;
-  cfg.pin_vsync     = VSYNC_GPIO_NUM;
-  cfg.pin_href      = HREF_GPIO_NUM;
-  cfg.pin_sccb_sda  = SIOD_GPIO_NUM;
-  cfg.pin_sccb_scl  = SIOC_GPIO_NUM;
-  cfg.pin_pwdn      = PWDN_GPIO_NUM;
-  cfg.pin_reset     = RESET_GPIO_NUM;
-  cfg.xclk_freq_hz  = 20000000;
-  cfg.pixel_format  = PIXFORMAT_JPEG;
+  cfg.ledc_channel = LEDC_CHANNEL_0;
+  cfg.ledc_timer = LEDC_TIMER_0;
+  cfg.pin_d0 = Y2_GPIO_NUM;
+  cfg.pin_d1 = Y3_GPIO_NUM;
+  cfg.pin_d2 = Y4_GPIO_NUM;
+  cfg.pin_d3 = Y5_GPIO_NUM;
+  cfg.pin_d4 = Y6_GPIO_NUM;
+  cfg.pin_d5 = Y7_GPIO_NUM;
+  cfg.pin_d6 = Y8_GPIO_NUM;
+  cfg.pin_d7 = Y9_GPIO_NUM;
+  cfg.pin_xclk = XCLK_GPIO_NUM;
+  cfg.pin_pclk = PCLK_GPIO_NUM;
+  cfg.pin_vsync = VSYNC_GPIO_NUM;
+  cfg.pin_href = HREF_GPIO_NUM;
+  cfg.pin_sccb_sda = SIOD_GPIO_NUM;
+  cfg.pin_sccb_scl = SIOC_GPIO_NUM;
+  cfg.pin_pwdn = PWDN_GPIO_NUM;
+  cfg.pin_reset = RESET_GPIO_NUM;
+  cfg.xclk_freq_hz = 20000000;
+  cfg.pixel_format = PIXFORMAT_JPEG;
 
   // Start with lower res to save memory, configurable later
-  cfg.frame_size    = FRAMESIZE_VGA;
-  cfg.jpeg_quality  = 10;
-  cfg.fb_count      = 2;
-  cfg.grab_mode     = CAMERA_GRAB_WHEN_EMPTY;
-  cfg.fb_location   = CAMERA_FB_IN_PSRAM;
+  cfg.frame_size = FRAMESIZE_VGA;
+  cfg.jpeg_quality = 10;
+  cfg.fb_count = 2;
+  cfg.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+  cfg.fb_location = CAMERA_FB_IN_PSRAM;
 
   esp_err_t err = esp_camera_init(&cfg);
   if (err != ESP_OK) {
@@ -666,7 +751,8 @@ bool initCamera() {
 // HTTP Stream Server
 // ─────────────────────────────────────────────────────────────────────────────
 void startStreamServer() {
-  if (serverRunning) return;
+  if (serverRunning)
+    return;
 
   if (webServer) {
     delete webServer;
@@ -674,12 +760,13 @@ void startStreamServer() {
   }
   webServer = new WebServer(80);
 
-  webServer->on("/",       HTTP_GET,  handleRoot);
-  webServer->on("/config", HTTP_GET,  handleCamConfigPage);
+  webServer->on("/", HTTP_GET, handleRoot);
+  webServer->on("/config", HTTP_GET, handleCamConfigPage);
   webServer->on("/config", HTTP_POST, handleCamConfigSave);
-  webServer->onNotFound([]() {
-    webServer->send(404, "text/plain", "Not found");
-  });
+  webServer->on("/label", HTTP_POST, handleLabelPost);
+  webServer->on("/label", HTTP_GET, handleLabelGet);
+  webServer->onNotFound(
+      []() { webServer->send(404, "text/plain", "Not found"); });
 
   webServer->begin();
   serverRunning = true;
@@ -687,14 +774,13 @@ void startStreamServer() {
   // Spawn the MJPEG streaming task on Core 0 (protocol/network core).
   // Core 1 (Arduino loop) remains free for button polling and OLED updates.
   streamTaskStop = false;
-  xTaskCreatePinnedToCore(
-    streamingTask,       // task function
-    "StreamTask",        // name (debug)
-    8192,                // stack size in bytes
-    nullptr,             // task parameter
-    1,                   // priority
-    &streamTaskHandle,   // handle
-    0                    // pin to Core 0
+  xTaskCreatePinnedToCore(streamingTask,     // task function
+                          "StreamTask",      // name (debug)
+                          8192,              // stack size in bytes
+                          nullptr,           // task parameter
+                          1,                 // priority
+                          &streamTaskHandle, // handle
+                          0                  // pin to Core 0
   );
 }
 
@@ -713,19 +799,148 @@ void stopStreamServer() {
     }
   }
 
-  if (!serverRunning) return;
+  if (!serverRunning)
+    return;
   if (webServer) {
     webServer->stop();
     delete webServer;
-    webServer     = nullptr;
+    webServer = nullptr;
     serverRunning = false;
   }
 }
 
-// Root page – simple HTML with embedded stream (stream served on port 81)
+// =============================================================================
+// DFPLAYER MINI SUBSYSTEM  (UART0: TX=GPIO1, RX=GPIO3, 9600 baud)
+// =============================================================================
+/**
+ * Send a 10-byte framed command to the DFPlayer Mini over UART0.
+ * Frame format: 0x7E FF 06 CMD FB PARAM1 PARAM2 CKSUM_H CKSUM_L 0xEF
+ * FB = 0x00 (no ACK feedback requested).
+ */
+void dfPlayerCmd(uint8_t cmd, uint8_t param1, uint8_t param2) {
+  int16_t sum =
+      -(0xFF + 0x06 + (int16_t)cmd + 0x00 + (int16_t)param1 + (int16_t)param2);
+  uint8_t buf[10] = {
+      0x7E,                  // start byte
+      0xFF,                  // version
+      0x06,                  // data length
+      cmd,                   // command byte
+      0x00,                  // no feedback
+      param1,                // parameter high byte
+      param2,                // parameter low byte
+      (uint8_t)(sum >> 8),   // checksum high
+      (uint8_t)(sum & 0xFF), // checksum low
+      0xEF                   // end byte
+  };
+  Serial.write(buf, 10);
+}
+
+/**
+ * Initialise DFPlayer: open UART0, wait for the module to boot,
+ * select the TF/SD card source, and set the playback volume.
+ * Called once from setup() before WiFi is started.
+ */
+void initDFPlayer() {
+  Serial.begin(9600);            // UART0 – shared TX=GPIO1, RX=GPIO3
+  delay(1500);                   // allow DFPlayer to finish power-up
+  dfPlayerCmd(0x09, 0x00, 0x02); // 0x09 = select source: 0x02 = TF card
+  delay(200);
+  dfPlayerCmd(0x06, 0x00, 25); // 0x06 = set volume (0-30); 20 ≈ 67 %
+  delay(100);
+}
+
+/**
+ * Play the audio track that corresponds to a label id.
+ * Track numbers on the SD card mirror label_info.txt (1=A … 56=uang).
+ * Uses DFPlayer command 0x03 (play by file index in root folder).
+ */
+void playLabelAudio(int trackNum) {
+  if (trackNum < 1 || trackNum > LABEL_COUNT)
+    return;
+  dfPlayerCmd(0x03, 0x00, (uint8_t)trackNum);
+}
+
+// =============================================================================
+// LABEL COMMUNICATION
+// =============================================================================
+
+/** Convert label id (1–56) to its BISINDO text. Returns "" for out-of-range id.
+ */
+const char *labelIdToText(int id) {
+  if (id < 1 || id > LABEL_COUNT)
+    return "";
+  return LABEL_TEXT[id];
+}
+
+/** POST /label?id=<n>  – browser sends a label id; stored for pickup in loop().
+ */
+void handleLabelPost() {
+  if (!webServer->hasArg("id")) {
+    webServer->send(400, "application/json", "{\"error\":\"missing id\"}");
+    return;
+  }
+  int id = webServer->arg("id").toInt();
+  if (id < 1 || id > LABEL_COUNT) {
+    webServer->send(400, "application/json", "{\"error\":\"id out of range\"}");
+    return;
+  }
+  receivedLabelId = id; // consumed by handleStreaming() on next loop tick
+  webServer->send(200, "application/json",
+                  "{\"label\":\"" + String(labelIdToText(id)) + "\"}");
+}
+
+/** GET /label  – returns the last confirmed label text as JSON. */
+void handleLabelGet() {
+  webServer->send(200, "application/json",
+                  "{\"label\":\"" + currentLabelText + "\"}");
+}
+
+/**
+ * Draw the received BISINDO label on the OLED.
+ * Labels ≤8 chars use text size 2 (larger); longer ones use size 1
+ * with word-wrap at the first space (e.g. "terima kasih" → two lines).
+ */
+void drawLabelScreen(const String &text) {
+  oled.clearDisplay();
+  drawOledHeader();
+  oled.setTextColor(SH110X_WHITE);
+
+  oled.setTextSize(1);
+  oled.setCursor(0, 12);
+  oled.println("Label received:");
+
+  if (text.length() <= 8) {
+    oled.setTextSize(2);
+    oled.setCursor(0, 26);
+    oled.println(text);
+  } else {
+    oled.setTextSize(1);
+    int sp = text.indexOf(' ');
+    if (sp > 0) {
+      oled.setCursor(0, 26);
+      oled.println(text.substring(0, sp));
+      oled.setCursor(0, 38);
+      oled.println(text.substring(sp + 1));
+    } else {
+      oled.setCursor(0, 26);
+      oled.println(text);
+    }
+  }
+
+  oled.display();
+}
+
+// Root page – main UI: camera stream + label panel (stream on port 81)
 void handleRoot() {
   String ip = WiFi.localIP().toString();
   String streamUrl = "http://" + ip + ":81";
+
+  // Build label <option> list server-side from LABEL_TEXT table
+  String labelOpts = "";
+  for (int i = 1; i <= LABEL_COUNT; i++) {
+    labelOpts += "<option value='" + String(i) + "'>" + String(i) + " - " +
+                 String(LABEL_TEXT[i]) + "</option>";
+  }
 
   String html = R"rawhtml(
 <!DOCTYPE html>
@@ -735,21 +950,46 @@ void handleRoot() {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BISINDO ESP32-CAM</title>
 <style>
+  *{box-sizing:border-box;}
   body{font-family:sans-serif;background:#111;color:#eee;margin:0;padding:16px;text-align:center;}
   h1{color:#4fc3f7;margin-bottom:4px;}
+  h2{color:#80cbc4;font-size:1rem;margin:0 0 8px;}
   img{width:100%;max-width:640px;border:2px solid #4fc3f7;border-radius:8px;}
   .btn{
     display:inline-block;
-    margin:10px 5px;
-    padding:10px 18px;
+    margin:6px 4px;
+    padding:9px 16px;
     background:#4fc3f7;
     color:#111;
+    border:none;
     border-radius:6px;
     text-decoration:none;
     font-weight:bold;
     cursor:pointer;
+    font-size:.95rem;
   }
+  .btn:hover{opacity:.85;}
   .btn.stop{background:#ef5350;color:#fff;}
+  .label-panel{
+    max-width:640px;
+    margin:14px auto 0;
+    background:#1a1a2e;
+    border:1px solid #4fc3f7;
+    border-radius:10px;
+    padding:14px 16px;
+    text-align:left;
+  }
+  select{
+    width:100%;
+    padding:8px;
+    background:#222;
+    color:#eee;
+    border:1px solid #555;
+    border-radius:6px;
+    font-size:.95rem;
+    margin-bottom:8px;
+  }
+  #labelStatus{margin-top:8px;font-size:.9rem;color:#80cbc4;min-height:1.4em;}
 </style>
 </head>
 <body>
@@ -761,20 +1001,31 @@ void handleRoot() {
 
 <br>
 
-<button class="btn" onclick="startStream()">Start Stream</button>
-<button class="btn stop" onclick="stopStream()">Stop Stream</button>
+<button class="btn" onclick="startStream()">&#9654; Start Stream</button>
+<button class="btn stop" onclick="stopStream()">&#9646;&#9646; Stop Stream</button>
 
 <br>
 
-<a class="btn" href="/config">Camera Config</a>
+<a class="btn" href="/config">&#9881; Camera Config</a>
+
+<div class="label-panel">
+  <h2>&#128288; Send Label to ESP32-CAM</h2>
+  <select id="labelSelect">
+)rawhtml" + labelOpts +
+                R"rawhtml(
+  </select>
+  <button class="btn" style="width:100%;margin:0 0 4px;" onclick="sendLabel()">Send Label &#10148;</button>
+  <p id="labelStatus">-</p>
+</div>
 
 <script>
-// Stream URL points to the dedicated MJPEG server on port 81.
-const STREAM_URL = ")rawhtml" + streamUrl + R"rawhtml(";
+const STREAM_URL = ")rawhtml" +
+                streamUrl + R"rawhtml(";
 
 let streaming = false;
-const img = document.getElementById("stream");
+const img        = document.getElementById("stream");
 const statusText = document.getElementById("status");
+const labelSt    = document.getElementById("labelStatus");
 
 function startStream() {
   if (!streaming) {
@@ -788,6 +1039,27 @@ function stopStream() {
   img.src = "";
   statusText.innerText = "Stream stopped";
   streaming = false;
+}
+
+function sendLabel() {
+  const sel = document.getElementById("labelSelect");
+  const id  = sel.value;
+  labelSt.style.color = "#80cbc4";
+  labelSt.innerText   = "Sending...";
+  fetch("/label", {
+    method:  "POST",
+    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    body:    "id=" + id
+  })
+  .then(r => r.json())
+  .then(d => {
+    labelSt.style.color = "#a5d6a7";
+    labelSt.innerText   = "\u2713 Sent: " + d.label;
+  })
+  .catch(() => {
+    labelSt.style.color = "#ef9a9a";
+    labelSt.innerText   = "\u2717 Error \u2013 check connection";
+  });
 }
 </script>
 </body>
@@ -807,7 +1079,7 @@ function stopStream() {
  *
  * Termination: set streamTaskStop = true before deleting the server.
  */
-void streamingTask(void* pvParameters) {
+void streamingTask(void *pvParameters) {
   const String boundary = "frame";
 
   // Dedicated server on port 81 for the raw MJPEG stream.
@@ -824,14 +1096,17 @@ void streamingTask(void* pvParameters) {
     // Drain the HTTP request headers (we only serve one content type).
     unsigned long headerTimeout = millis();
     while (client.connected() && !client.available()) {
-      if (millis() - headerTimeout > 2000) break;
+      if (millis() - headerTimeout > 2000)
+        break;
       vTaskDelay(pdMS_TO_TICKS(1));
     }
-    while (client.available()) client.read(); // discard request bytes
+    while (client.available())
+      client.read(); // discard request bytes
 
     // Send MJPEG response headers.
     client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: multipart/x-mixed-replace; boundary=" + boundary);
+    client.println("Content-Type: multipart/x-mixed-replace; boundary=" +
+                   boundary);
     client.println("Cache-Control: no-cache, no-store, must-revalidate");
     client.println("Pragma: no-cache");
     client.println("Connection: close");
@@ -839,7 +1114,7 @@ void streamingTask(void* pvParameters) {
 
     // Stream frames until client disconnects or stop is requested.
     while (client.connected() && !streamTaskStop) {
-      camera_fb_t* fb = esp_camera_fb_get();
+      camera_fb_t *fb = esp_camera_fb_get();
       if (!fb) {
         vTaskDelay(pdMS_TO_TICKS(30));
         continue;
@@ -871,33 +1146,27 @@ void streamingTask(void* pvParameters) {
 void handleCamConfigPage() {
   // Load saved values (or defaults)
   prefs.begin("cam_cfg", true);
-  int res  = prefs.getInt("framesize",    FRAMESIZE_VGA);
-  int qual = prefs.getInt("quality",      12);
-  int flip = prefs.getInt("vflip",        0);
-  int mir  = prefs.getInt("hmirror",      0);
+  int res = prefs.getInt("framesize", FRAMESIZE_VGA);
+  int qual = prefs.getInt("quality", 12);
+  int flip = prefs.getInt("vflip", 0);
+  int mir = prefs.getInt("hmirror", 0);
   prefs.end();
 
   // Resolution option list
-  const char* resNames[] = {
-    "QQVGA(160x120)",  // 0
-    "QCIF(176x144)",
-    "HQVGA(240x176)",
-    "240x240",
-    "QVGA(320x240)",
-    "CIF(400x296)",
-    "HVGA(480x320)",
-    "VGA(640x480)",    // 7
-    "SVGA(800x600)",
-    "XGA(1024x768)",
-    "HD(1280x720)",
-    "SXGA(1280x1024)",
-    "UXGA(1600x1200)"  // 12
+  const char *resNames[] = {
+      "QQVGA(160x120)", // 0
+      "QCIF(176x144)",  "HQVGA(240x176)", "240x240",      "QVGA(320x240)",
+      "CIF(400x296)",   "HVGA(480x320)",
+      "VGA(640x480)", // 7
+      "SVGA(800x600)",  "XGA(1024x768)",  "HD(1280x720)", "SXGA(1280x1024)",
+      "UXGA(1600x1200)" // 12
   };
 
   String opts = "";
   for (int i = 0; i <= 12; i++) {
     opts += "<option value='" + String(i) + "'";
-    if (i == res) opts += " selected";
+    if (i == res)
+      opts += " selected";
     opts += ">" + String(resNames[i]) + "</option>";
   }
 
@@ -921,16 +1190,17 @@ a{color:#4fc3f7;}
 <h1>Camera Configuration</h1>
 <form method="POST" action="/config">
   <label>Resolution:
-    <select name="framesize">)rawhtml" + opts + R"rawhtml(</select>
+    <select name="framesize">)rawhtml" +
+                opts + R"rawhtml(</select>
   </label>
   <label>JPEG Quality (1-63, lower=better):
     <input type="number" name="quality" min="1" max="63" value=")rawhtml" +
-    String(qual) + R"rawhtml(">
+                String(qual) + R"rawhtml(">
   </label>
   <label><input type="checkbox" name="vflip" value="1")rawhtml" +
-    (flip ? " checked" : "") + R"rawhtml(> Vertical Flip</label>
+                (flip ? " checked" : "") + R"rawhtml(> Vertical Flip</label>
   <label><input type="checkbox" name="hmirror" value="1")rawhtml" +
-    (mir  ? " checked" : "") + R"rawhtml(> Horizontal Mirror</label>
+                (mir ? " checked" : "") + R"rawhtml(> Horizontal Mirror</label>
   <button type="submit">Save & Apply</button>
 </form>
 <br><a href="/">&#8592; Back to Stream</a>
@@ -942,30 +1212,32 @@ a{color:#4fc3f7;}
 
 // Apply and persist camera settings
 void handleCamConfigSave() {
-  int fs   = webServer->hasArg("framesize") ? webServer->arg("framesize").toInt() : FRAMESIZE_VGA;
-  int qual = webServer->hasArg("quality")   ? webServer->arg("quality").toInt()   : 12;
-  int vf   = webServer->hasArg("vflip")     ? 1 : 0;
-  int hm   = webServer->hasArg("hmirror")   ? 1 : 0;
+  int fs = webServer->hasArg("framesize") ? webServer->arg("framesize").toInt()
+                                          : FRAMESIZE_VGA;
+  int qual =
+      webServer->hasArg("quality") ? webServer->arg("quality").toInt() : 12;
+  int vf = webServer->hasArg("vflip") ? 1 : 0;
+  int hm = webServer->hasArg("hmirror") ? 1 : 0;
 
   // Clamp values
-  fs   = constrain(fs,   0, 12);
+  fs = constrain(fs, 0, 12);
   qual = constrain(qual, 1, 63);
 
   // Persist
   prefs.begin("cam_cfg", false);
   prefs.putInt("framesize", fs);
-  prefs.putInt("quality",   qual);
-  prefs.putInt("vflip",     vf);
-  prefs.putInt("hmirror",   hm);
+  prefs.putInt("quality", qual);
+  prefs.putInt("vflip", vf);
+  prefs.putInt("hmirror", hm);
   prefs.end();
 
   // Apply to sensor
-  sensor_t* s = esp_camera_sensor_get();
+  sensor_t *s = esp_camera_sensor_get();
   if (s) {
-    s->set_framesize(s,  (framesize_t)fs);
-    s->set_quality(s,    qual);
-    s->set_vflip(s,      vf);
-    s->set_hmirror(s,    hm);
+    s->set_framesize(s, (framesize_t)fs);
+    s->set_quality(s, qual);
+    s->set_vflip(s, vf);
+    s->set_hmirror(s, hm);
   }
 
   // Redirect back to stream page
@@ -996,7 +1268,7 @@ void startAPMode() {
     webServer = nullptr;
   }
   webServer = new WebServer(AP_PORT);
-  webServer->on("/",     HTTP_GET,  handleAPRoot);
+  webServer->on("/", HTTP_GET, handleAPRoot);
   webServer->on("/save", HTTP_POST, handleAPSave);
   webServer->begin();
 }
@@ -1057,10 +1329,13 @@ void handleAPSave() {
   storedSSID = newSSID;
   storedPass = newPass;
 
-  webServer->send(200, "text/html",
-    "<html><body style='font-family:sans-serif;background:#0f1923;color:#e0e0e0;"
-    "padding:24px'><h2 style='color:#4fc3f7'>Saved! Connecting...</h2>"
-    "<p>The device will now connect to <b>" + newSSID + "</b>.</p></body></html>");
+  webServer->send(
+      200, "text/html",
+      "<html><body "
+      "style='font-family:sans-serif;background:#0f1923;color:#e0e0e0;"
+      "padding:24px'><h2 style='color:#4fc3f7'>Saved! Connecting...</h2>"
+      "<p>The device will now connect to <b>" +
+          newSSID + "</b>.</p></body></html>");
 
   delay(1000);
   stopAPMode();
@@ -1077,7 +1352,7 @@ void loadCredentials() {
   prefs.end();
 }
 
-void saveCredentials(const String& ssid, const String& pass) {
+void saveCredentials(const String &ssid, const String &pass) {
   prefs.begin("wifi_cred", false);
   prefs.putString("ssid", ssid);
   prefs.putString("pass", pass);
@@ -1119,7 +1394,7 @@ ButtonEvent pollButton() {
 
       if (clickCount == 2) {
         // Immediate double-click confirm
-        result     = BTN_DOUBLE;
+        result = BTN_DOUBLE;
         clickCount = 0;
         waitingDoubleClick = false;
       } else {
@@ -1136,7 +1411,7 @@ ButtonEvent pollButton() {
   // Timeout: single click confirm
   if (waitingDoubleClick && clickCount == 1 &&
       (millis() - lastClickTime) > DOUBLE_CLICK_MS) {
-    result     = BTN_SINGLE;
+    result = BTN_SINGLE;
     clickCount = 0;
     waitingDoubleClick = false;
   }
