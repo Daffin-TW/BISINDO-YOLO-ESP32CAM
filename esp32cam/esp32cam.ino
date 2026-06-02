@@ -72,8 +72,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  TERY CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-#define BATT_V_MIN 3.0f // 0 %
-#define BATT_V_MAX 4.0f // 100 %
+#define BATT_V_MIN 3.6f // 0 %
+#define BATT_V_MAX 4.02f // 100 %
 #define BATT_R1 100000.0f
 #define BATT_R2 100000.0f
 #define ADC_REF_V 3.3f
