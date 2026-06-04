@@ -72,7 +72,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  BATTERY CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-#define BATT_V_MIN 3.6f // 0 %
+#define BATT_V_MIN 3.6f  // 0 %
 #define BATT_V_MAX 4.02f // 100 %
 #define BATT_R1 100000.0f
 #define BATT_R2 100000.0f
@@ -86,6 +86,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #define AP_SSID "BISINDO ESP"
 #define AP_PORT 80
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERFACE SOUND TRACK NUMBERS  (filenames on SD card: 0057_startup.mp3 …)
+// Change these values if you reorder the files on the SD card.
+// ─────────────────────────────────────────────────────────────────────────────
+#define SND_STARTUP    57   // 0057_startup.mp3    – device power-on
+#define SND_INTERACT1  58   // 0058_interact1.mp3  – single-click
+#define SND_INTERACT2  59   // 0059_interact2.mp3  – double-click
+#define SND_CONFIG     60   // 0060_config.mp3     – config saved successfully
+#define SND_CONNECT    61   // 0061_connect.mp3    – WiFi connected
+#define SND_DISCONNECT 62   // 0062_disconnect.mp3 – WiFi lost
+#define SND_STREAMON   63   // 0063_streamon.mp3   – MJPEG client connected
+#define SND_STREAMOFF  64   // 0064_streamoff.mp3  – MJPEG client disconnected
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BISINDO LABEL TABLE  (derived from label_info.txt, keys 1–56)
@@ -166,6 +179,7 @@ bool serverRunning = false;
 // ---------- streaming task ---------------------------------------------------
 TaskHandle_t streamTaskHandle = nullptr;
 volatile bool streamTaskStop = false;
+volatile bool streamClientConnected = false; // true while a client is streaming
 
 // ---------- label communication ----------------------------------------------
 volatile int receivedLabelId =
@@ -261,15 +275,15 @@ void setup() {
   // --- Enter boot state – no WiFi yet ---
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
-  delay(100); // small hardware settle
 
   // --- DFPlayer Mini (UART0: TX=GPIO1, RX=GPIO3) ---
   initDFPlayer();
+  dfPlayerCmd(0x03, 0x00, SND_STARTUP); // play startup chime
 
   // Set ADC attenuation to 11dB (allows reading up to 3.3V)
   analogSetPinAttenuation(BATTERY_PIN, ADC_11db);
   analogReadResolution(12); // 12-bit resolution (0 to 4095)
-  readBatteryRaw(); // Initialize battery pin reading
+  readBatteryRaw();         // Initialize battery pin reading
   enterState(STATE_BOOT_BATTERY);
 }
 
@@ -278,6 +292,13 @@ void setup() {
 // ─────────────────────────────────────────────────────────────────────────────
 void loop() {
   ButtonEvent btn = pollButton();
+
+  // Interface sounds for every button interaction
+  if (btn == BTN_SINGLE) {
+    dfPlayerCmd(0x03, 0x00, SND_INTERACT1);
+  } else if (btn == BTN_DOUBLE) {
+    dfPlayerCmd(0x03, 0x00, SND_INTERACT2);
+  }
 
   switch (currentState) {
   case STATE_BOOT_BATTERY:
@@ -448,6 +469,7 @@ void handleWifiConfirm() {
 // ── STATE 2: WiFi Connecting ─────────────────────────────────────────────────
 void handleWifiConnecting() {
   if (WiFi.status() == WL_CONNECTED) {
+    dfPlayerCmd(0x03, 0x00, SND_CONNECT); // WiFi connected chime
     enterState(STATE_WIFI_CONNECTED_INFO);
     return;
   }
@@ -484,11 +506,22 @@ void handleStreaming() {
   if (webServer)
     webServer->handleClient();
 
+  // Detect MJPEG client connect / disconnect and refresh OLED accordingly
+  static bool prevClientState = false;
+  if (streamClientConnected != prevClientState) {
+    prevClientState = streamClientConnected;
+    dfPlayerCmd(0x03, 0x00,
+                streamClientConnected ? SND_STREAMON : SND_STREAMOFF);
+    if (!labelShowing) {
+      drawStreamingScreen();
+    }
+  }
+
   // Process incoming label from web UI (set by handleLabelPost on this same
   // core)
   if (receivedLabelId >= 0) {
     int id = receivedLabelId;
-    receivedLabelId = -1;               // clear flag immediately
+    receivedLabelId = -1; // clear flag immediately
 
     // Append new label to the accumulated text string
     String newLabel = labelIdToText(id);
@@ -504,21 +537,22 @@ void handleStreaming() {
           currentLabelText.substring(currentLabelText.length() - 20);
     }
 
-    labelShowing      = true;
-    labelDisplayTimer = millis();        // reset inactivity timer
-    drawLabelScreen(currentLabelText);   // update OLED with accumulated text
-    playLabelAudio(id);                  // speak this label immediately
+    labelShowing = true;
+    labelDisplayTimer = millis();      // reset inactivity timer
+    drawLabelScreen(currentLabelText); // update OLED with accumulated text
+    playLabelAudio(id);                // speak this label immediately
   }
 
   // Inactivity timeout: no new detection for 3 s → clear text and revert screen
   if (labelShowing && (millis() - labelDisplayTimer > 3000)) {
-    labelShowing     = false;
-    currentLabelText = "";               // clear accumulated text
+    labelShowing = false;
+    currentLabelText = ""; // clear accumulated text
     drawStreamingScreen();
   }
 
   // Monitor WiFi health
   if (WiFi.status() != WL_CONNECTED) {
+    dfPlayerCmd(0x03, 0x00, SND_DISCONNECT); // WiFi lost chime
     stopStreamServer();
     enterState(STATE_DISCONNECTED_NOTICE);
   }
@@ -550,21 +584,18 @@ void handleDisconnectedNotice() {
  * Take a single ADC sample, compute voltage and percentage immediately.
  * WiFi MUST be OFF when this runs (ADC2 is shared with the radio).
  */
-int readBatteryRaw()
-{
+int readBatteryRaw() {
   int maxValue = 0;
-  for (int i = 0; i < 20; i++)
-  {
+  for (int i = 0; i < 20; i++) {
     int reading = analogRead(BATTERY_PIN);
-    if (reading > maxValue)
-    {
+    if (reading > maxValue) {
       maxValue = reading;
     }
     delay(5);
   }
   return maxValue;
 }
- 
+
 void startBatteryReading() {
   batteryRaw = readBatteryRaw();
   batteryVoltage = rawToVoltage(batteryRaw);
@@ -727,15 +758,17 @@ void drawStreamingScreen() {
   drawOledHeader();
   oled.setTextSize(1);
   oled.setTextColor(SH110X_WHITE);
-  oled.setCursor(0, 12);
-  oled.println("Streaming ON");
-  oled.setCursor(0, 24);
+
+  oled.setCursor(0, 14);
+  oled.println("Active");
+
+  oled.setCursor(0, 26);
   oled.print("IP: ");
   oled.println(WiFi.localIP().toString());
-  oled.setCursor(0, 36);
-  oled.println("1x: battery");
-  oled.setCursor(0, 46);
-  oled.println("2x: change wifi");
+
+  oled.setCursor(0, 40);
+  oled.println(streamClientConnected ? "Stream On" : "Stream Off");
+
   oled.display();
 }
 
@@ -889,7 +922,7 @@ void initDFPlayer() {
   delay(1500);                   // allow DFPlayer to finish power-up
   dfPlayerCmd(0x09, 0x00, 0x02); // 0x09 = select source: 0x02 = TF card
   delay(200);
-  dfPlayerCmd(0x06, 0x00, 25); // 0x06 = set volume (0-30); 20 ≈ 67 %
+  dfPlayerCmd(0x06, 0x00, 30); // 0x06 = set volume (0-30); 20 ≈ 67 %
   delay(100);
 }
 
@@ -1163,6 +1196,7 @@ void streamingTask(void *pvParameters) {
     client.println();
 
     // Stream frames until client disconnects or stop is requested.
+    streamClientConnected = true; // signal Core 1 that a client is active
     while (client.connected() && !streamTaskStop) {
       camera_fb_t *fb = esp_camera_fb_get();
       if (!fb) {
@@ -1184,6 +1218,7 @@ void streamingTask(void *pvParameters) {
       vTaskDelay(pdMS_TO_TICKS(1));
     }
 
+    streamClientConnected = false; // signal Core 1 that the client left
     client.stop();
   }
 
@@ -1290,6 +1325,8 @@ void handleCamConfigSave() {
     s->set_hmirror(s, hm);
   }
 
+  dfPlayerCmd(0x03, 0x00, SND_CONFIG); // camera config saved chime
+
   // Redirect back to stream page
   webServer->sendHeader("Location", "/");
   webServer->send(303);
@@ -1387,6 +1424,7 @@ void handleAPSave() {
       "<p>The device will now connect to <b>" +
           newSSID + "</b>.</p></body></html>");
 
+  dfPlayerCmd(0x03, 0x00, SND_CONFIG); // WiFi credentials saved chime
   delay(1000);
   stopAPMode();
   enterState(STATE_WIFI_CONNECTING);
