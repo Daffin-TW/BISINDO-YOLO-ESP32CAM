@@ -21,7 +21,7 @@ INFERENCE_SKIP_FRAMES = 3
 
 # Minimum seconds between successive label POSTs to the ESP32-CAM
 # (prevents flooding when the same sign stays in frame)
-LABEL_SEND_COOLDOWN = 3.0
+LABEL_SEND_COOLDOWN = 1.0
 
 # ── Flask server ──────────────────────────────────────────────────────────────
 FLASK_HOST  = "0.0.0.0"

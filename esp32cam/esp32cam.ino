@@ -70,7 +70,7 @@
 #define FAIL_MSG_MS 3000       // 3 s "Failed to Connect" notice
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  TERY CONSTANTS
+//  BATTERY CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 #define BATT_V_MIN 3.6f // 0 %
 #define BATT_V_MAX 4.02f // 100 %
@@ -78,6 +78,8 @@
 #define BATT_R2 100000.0f
 #define ADC_REF_V 3.3f
 #define ADC_MAX 4095.0f
+#define CALIBRATION_FACTOR 1.03
+// #define CALIBRATION_FACTOR 1
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACCESS POINT CREDENTIALS
@@ -146,6 +148,7 @@ SystemState returnState = STATE_STREAMING; // used after battery check
 
 // ---------- battery globals --------------------------------------------------
 float batteryVoltage = 0.0f;
+int batteryRaw = 0;
 int batteryPercent = 0;
 
 // ---------- WiFi globals -----------------------------------------------------
@@ -205,6 +208,7 @@ void drawStreamingScreen();
 
 void drawDisconnectedScreen();
 
+int readBatteryRaw();
 void startBatteryReading();
 bool processBatterySamples(); // always returns true (single-sample)
 float rawToVoltage(int raw);
@@ -262,7 +266,10 @@ void setup() {
   // --- DFPlayer Mini (UART0: TX=GPIO1, RX=GPIO3) ---
   initDFPlayer();
 
-  analogRead(BATTERY_PIN); // Initialize battery pin reading
+  // Set ADC attenuation to 11dB (allows reading up to 3.3V)
+  analogSetPinAttenuation(BATTERY_PIN, ADC_11db);
+  analogReadResolution(12); // 12-bit resolution (0 to 4095)
+  readBatteryRaw(); // Initialize battery pin reading
   enterState(STATE_BOOT_BATTERY);
 }
 
@@ -481,17 +488,32 @@ void handleStreaming() {
   // core)
   if (receivedLabelId >= 0) {
     int id = receivedLabelId;
-    receivedLabelId = -1; // clear flag immediately
-    currentLabelText = labelIdToText(id);
-    labelShowing = true;
-    labelDisplayTimer = millis();
-    drawLabelScreen(currentLabelText); // update OLED
-    playLabelAudio(id);                // play audio via DFPlayer
+    receivedLabelId = -1;               // clear flag immediately
+
+    // Append new label to the accumulated text string
+    String newLabel = labelIdToText(id);
+    if (currentLabelText.length() == 0) {
+      currentLabelText = newLabel;
+    } else {
+      currentLabelText += " " + newLabel;
+    }
+
+    // Trim from the front if the string exceeds 20 characters
+    if (currentLabelText.length() > 20) {
+      currentLabelText =
+          currentLabelText.substring(currentLabelText.length() - 20);
+    }
+
+    labelShowing      = true;
+    labelDisplayTimer = millis();        // reset inactivity timer
+    drawLabelScreen(currentLabelText);   // update OLED with accumulated text
+    playLabelAudio(id);                  // speak this label immediately
   }
 
-  // Auto-revert OLED to streaming screen after 3 s
+  // Inactivity timeout: no new detection for 3 s → clear text and revert screen
   if (labelShowing && (millis() - labelDisplayTimer > 3000)) {
-    labelShowing = false;
+    labelShowing     = false;
+    currentLabelText = "";               // clear accumulated text
     drawStreamingScreen();
   }
 
@@ -528,9 +550,24 @@ void handleDisconnectedNotice() {
  * Take a single ADC sample, compute voltage and percentage immediately.
  * WiFi MUST be OFF when this runs (ADC2 is shared with the radio).
  */
+int readBatteryRaw()
+{
+  int maxValue = 0;
+  for (int i = 0; i < 20; i++)
+  {
+    int reading = analogRead(BATTERY_PIN);
+    if (reading > maxValue)
+    {
+      maxValue = reading;
+    }
+    delay(5);
+  }
+  return maxValue;
+}
+ 
 void startBatteryReading() {
-  int raw = analogRead(BATTERY_PIN);
-  batteryVoltage = rawToVoltage(raw);
+  batteryRaw = readBatteryRaw();
+  batteryVoltage = rawToVoltage(batteryRaw);
   float clamped = constrain(batteryVoltage, BATT_V_MIN, BATT_V_MAX);
   batteryPercent =
       (int)(((clamped - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN)) * 100.0f);
@@ -543,9 +580,13 @@ bool processBatterySamples() { return true; }
 
 /** Convert raw ADC reading → real battery voltage (voltage divider) */
 float rawToVoltage(int raw) {
-  float vADC = (raw / ADC_MAX) * ADC_REF_V;
+  float vADC = ((float)raw / ADC_MAX) * ADC_REF_V;
   // Reverse voltage divider: Vbat = vADC * (R1+R2)/R2
-  return vADC * ((BATT_R1 + BATT_R2) / BATT_R2);
+  float vBat = vADC * ((BATT_R1 + BATT_R2) / BATT_R2);
+
+  // calibration fix
+  vBat *= CALIBRATION_FACTOR;
+  return vBat;
 }
 
 // =============================================================================
@@ -583,8 +624,11 @@ void drawBootBatteryScreen() {
 void drawBatteryResult() {
   oled.clearDisplay();
   drawOledHeader();
-  oled.setTextSize(2);
   oled.setTextColor(SH110X_WHITE);
+  oled.setCursor(0, 0);
+  oled.setTextSize(1);
+  oled.printf("Raw: %d", batteryRaw);
+  oled.setTextSize(2);
   oled.setCursor(10, 20);
   oled.printf("%d%%", batteryPercent);
   oled.setTextSize(1);
@@ -896,35 +940,41 @@ void handleLabelGet() {
 }
 
 /**
- * Draw the received BISINDO label on the OLED.
- * Labels ≤8 chars use text size 2 (larger); longer ones use size 1
- * with word-wrap at the first space (e.g. "terima kasih" → two lines).
+ * Draw the accumulated BISINDO label text on the OLED.
+ *
+ * The text can be up to 20 characters (a growing string of detected labels).
+ * Always uses textSize 1 so the full string fits within the 128-px width.
+ * Splits across two lines at the last space before column 17.
  */
 void drawLabelScreen(const String &text) {
   oled.clearDisplay();
   drawOledHeader();
   oled.setTextColor(SH110X_WHITE);
-
   oled.setTextSize(1);
-  oled.setCursor(0, 12);
-  oled.println("Label received:");
 
-  if (text.length() <= 8) {
-    oled.setTextSize(2);
-    oled.setCursor(0, 26);
+  // Header
+  oled.setCursor(0, 12);
+  oled.println("Teks:");
+
+  // Word-wrap: up to ~17 chars per line at textSize 1 (6 px/char + margin)
+  const int LINE_CHARS = 17;
+  if ((int)text.length() <= LINE_CHARS) {
+    // Fits on one line
+    oled.setCursor(0, 24);
     oled.println(text);
   } else {
-    oled.setTextSize(1);
-    int sp = text.indexOf(' ');
-    if (sp > 0) {
-      oled.setCursor(0, 26);
-      oled.println(text.substring(0, sp));
-      oled.setCursor(0, 38);
-      oled.println(text.substring(sp + 1));
-    } else {
-      oled.setCursor(0, 26);
-      oled.println(text);
+    // Find the last space at or before position LINE_CHARS
+    int splitAt = LINE_CHARS;
+    for (int i = LINE_CHARS; i >= 1; i--) {
+      if (text.charAt(i) == ' ') {
+        splitAt = i;
+        break;
+      }
     }
+    oled.setCursor(0, 24);
+    oled.println(text.substring(0, splitAt));
+    oled.setCursor(0, 34);
+    oled.println(text.substring(splitAt + 1));
   }
 
   oled.display();
