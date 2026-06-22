@@ -2,22 +2,32 @@ import time
 
 
 class FPS:
-    """Rolling instantaneous FPS counter.
+    """
+    Rolling FPS counter with exponential moving average (EMA) smoothing.
 
-    On the very first call to calculate_fps() the result is 0 (no previous
-    frame exists yet).  All subsequent calls return the inter-frame rate.
+    ``smoothing`` controls how aggressively transient spikes are suppressed.
+    A value of 0.93 means each new sample contributes only 7 % to the
+    running average, keeping the display stable even when individual frame
+    times vary by 10×.
     """
 
-    def __init__(self) -> None:
-        self._prev: float | None = None   # None until the first frame
+    def __init__(self, smoothing: float = 0.93) -> None:
+        self._prev: float | None = None
+        self._ema: float = 0.0
+        self._alpha: float = 1.0 - smoothing   # weight for the newest sample
 
     def calculate_fps(self) -> int:
         now = time.perf_counter()
         if self._prev is None:
             self._prev = now
-            return 0                      # no previous frame – return 0
+            return 0
         delta = now - self._prev
         self._prev = now
         if delta <= 0:
             return 0
-        return int(1.0 / delta)
+        instant = 1.0 / delta
+        # Seed EMA on first real measurement; blend thereafter
+        self._ema = instant if self._ema == 0.0 else (
+            self._alpha * instant + (1.0 - self._alpha) * self._ema
+        )
+        return max(0, int(round(self._ema)))

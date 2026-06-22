@@ -4,8 +4,8 @@
 
 # ── ESP32-CAM endpoints ───────────────────────────────────────────────────────
 # Base HTTP address of the ESP32-CAM control server (port 80)
-# ESP32_BASE_URL = "http://10.149.241.19"
-ESP32_BASE_URL = "http://192.168.100.130"
+ESP32_BASE_URL = "http://10.149.241.19"
+# ESP32_BASE_URL = "http://192.168.100.130"
 
 # Raw MJPEG stream served by the ESP32-CAM on port 81
 ESP32_STREAM_URL = f"{ESP32_BASE_URL}:81"
@@ -18,7 +18,7 @@ CONFIDENCE_THRESHOLD = 0.5
 
 # ── Performance tuning ────────────────────────────────────────────────────────
 # Run inference only on every Nth frame (1 = every frame, 2 = every other, …)
-INFERENCE_SKIP_FRAMES = 3
+INFERENCE_SKIP_FRAMES = 1
 
 # Minimum seconds between successive label POSTs to the ESP32-CAM
 # (prevents flooding when the same sign stays in frame)

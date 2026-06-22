@@ -36,13 +36,14 @@ const $topbarBadge     = $topbarDot.closest('.topbar-badge');
 // ─────────────────────────────────────────────────────────────────────────────
 // State
 // ─────────────────────────────────────────────────────────────────────────────
-let isStreaming   = false;
-let isConnected   = false;
-let startEpoch    = null;       // ms timestamp when stream started
-let clockInterval = null;       // setInterval handle for active-time ticker
-let sse           = null;       // EventSource handle
-let _statsRafId   = null;       // requestAnimationFrame id for stat debounce
-let _pendingStats = null;       // buffered SSE stats payload
+let isStreaming    = false;
+let isConnected    = false;
+let startEpoch     = null;
+let clockInterval  = null;
+let sse            = null;
+let _statsRafId    = null;           // requestAnimationFrame id for stat debounce
+let _pendingStats  = null;           // buffered SSE stats payload
+let _lastShownLabel = '';            // last label that triggered the flash animation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility
@@ -72,25 +73,37 @@ function setConnected(connected) {
 
 function updateDetection(label) {
   if (!label) return;
+
+  const isNew = (label !== _lastShownLabel);
+  _lastShownLabel = label;
+
   $detectionLabel.textContent = label.toUpperCase();
   $subtitleText.textContent   = label;
 
-  $detectionBadge.classList.remove('flash-in');
-  void $detectionBadge.offsetWidth;  // force reflow to restart animation
-  $detectionBadge.classList.add('active', 'flash-in');
+  // Only run the flash animation when the label actually changes
+  if (isNew) {
+    $detectionBadge.classList.remove('flash-in');
+    void $detectionBadge.offsetWidth;  // force reflow to restart animation
+    $detectionBadge.classList.add('active', 'flash-in');
 
-  $subtitleBar.classList.add('active');
-  $subtitleText.classList.remove('flash-in');
-  void $subtitleText.offsetWidth;
-  $subtitleText.classList.add('flash-in');
+    $subtitleBar.classList.add('active');
+    $subtitleText.classList.remove('flash-in');
+    void $subtitleText.offsetWidth;
+    $subtitleText.classList.add('flash-in');
+  } else {
+    // Keep badge active without re-triggering animation
+    $detectionBadge.classList.add('active');
+    $subtitleBar.classList.add('active');
+  }
 }
 
 function resetStats() {
-  $fps.textContent     = '--';
-  $latency.textContent = '--';
-  $hudFps.textContent  = '-- FPS';
+  $fps.textContent        = '--';
+  $latency.textContent    = '--';
+  $hudFps.textContent     = '-- FPS';
   $hudLatency.textContent = '-- ms';
   $activeTime.textContent = '00:00:00';
+  _lastShownLabel = '';              // reset so next session re-animates
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

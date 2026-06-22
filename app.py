@@ -182,6 +182,8 @@ def _inference_loop() -> None:
     fps_counter    = FPS()
     frame_index    = 0
     last_detections: list[dict] = []   # persisted between inference frames
+    _last_sse_t:    float = 0.0        # perf_counter timestamp of last SSE push
+    _sse_prev_label: str  = ""         # last label sent over SSE (detect changes)
 
     # Lazy-load YOLO detector (heavy; only once per process lifetime)
     if _detector is None:
@@ -274,13 +276,20 @@ def _inference_loop() -> None:
             _state["fps"]        = fps
             _state["latency_ms"] = latency_ms
 
-        # ── Push SSE sidebar stats ──────────────────────────────────────────
-        _push_sse("stats", json.dumps({
-            "fps":        fps,
-            "latency_ms": latency_ms,
-            "connected":  True,
-            "last_label": _state.get("last_label", ""),
-        }))
+        # ── Rate-limited SSE push (max 5 Hz) ───────────────────────────────
+        _now_t = time.perf_counter()
+        if _now_t - _last_sse_t >= 0.2:
+            _last_sse_t = _now_t
+            cur_label = _state.get("last_label", "")
+            payload: dict = {
+                "fps":        fps,
+                "latency_ms": latency_ms,
+                "connected":  True,
+            }
+            if cur_label != _sse_prev_label:  # only include when changed
+                payload["last_label"] = cur_label
+                _sse_prev_label = cur_label
+            _push_sse("stats", json.dumps(payload))
 
         # ── Encode and publish annotated frame ──────────────────────────────
         ok, buf = cv2.imencode(
