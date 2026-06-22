@@ -24,6 +24,7 @@ const $detectionLabel  = document.getElementById('detectionLabel');
 const $toggleBtn       = document.getElementById('toggleBtn');
 const $controlHint     = document.getElementById('controlHint');
 const $videoOverlay    = document.getElementById('videoOverlay');
+const $videoFeed       = document.getElementById('videoFeed');       // <img>
 const $subtitleBar     = document.getElementById('subtitleBar');
 const $subtitleText    = document.getElementById('subtitleText');
 const $hudFps          = document.getElementById('hudFps');
@@ -40,6 +41,8 @@ let isConnected   = false;
 let startEpoch    = null;       // ms timestamp when stream started
 let clockInterval = null;       // setInterval handle for active-time ticker
 let sse           = null;       // EventSource handle
+let _statsRafId   = null;       // requestAnimationFrame id for stat debounce
+let _pendingStats = null;       // buffered SSE stats payload
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility
@@ -122,21 +125,27 @@ function startSSE() {
     if (data.last_label) updateDetection(data.last_label);
   });
 
-  // Per-frame stats
+  // Per-frame stats — buffer and flush on next animation frame
   sse.addEventListener('stats', (e) => {
-    const data = JSON.parse(e.data);
+    _pendingStats = JSON.parse(e.data);
+    if (!_statsRafId) {
+      _statsRafId = requestAnimationFrame(() => {
+        _statsRafId = null;
+        if (!_pendingStats) return;
+        const data = _pendingStats;
+        _pendingStats = null;
 
-    const fps = data.fps ?? '--';
-    const lat = data.latency_ms ?? '--';
+        const fps = data.fps ?? '--';
+        const lat = data.latency_ms ?? '--';
+        $fps.textContent        = fps;
+        $latency.textContent    = lat;
+        $hudFps.textContent     = `${fps} FPS`;
+        $hudLatency.textContent = `${lat} ms`;
 
-    $fps.textContent         = fps;
-    $latency.textContent     = lat;
-    $hudFps.textContent      = `${fps} FPS`;
-    $hudLatency.textContent  = `${lat} ms`;
-
-    setConnected(data.connected === true);
-
-    if (data.last_label) updateDetection(data.last_label);
+        setConnected(data.connected === true);
+        if (data.last_label) updateDetection(data.last_label);
+      });
+    }
   });
 
   // Connection / streaming status changes
@@ -164,11 +173,16 @@ function stopSSE() {
 function setStreamingUI(streaming) {
   isStreaming = streaming;
 
-  // Overlay
-  $videoOverlay.classList.toggle('hidden', streaming);
-
-  // Button
   if (streaming) {
+    // Keep overlay visible until the first real annotated frame arrives
+    $videoFeed.onload = null;     // clear any previous handler
+    $videoFeed.onload = () => {
+      $videoFeed.onload = null;
+      $videoOverlay.classList.add('hidden');
+    };
+    // Force the MJPEG stream to reload (bust browser cache)
+    $videoFeed.src = '/video_feed?t=' + Date.now();
+
     $toggleBtn.className = 'btn-stream btn-stream--stop';
     $toggleBtn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="currentColor">
@@ -177,6 +191,9 @@ function setStreamingUI(streaming) {
       Hentikan Stream`;
     $controlHint.textContent = 'Stream & inferensi aktif';
   } else {
+    $videoOverlay.classList.remove('hidden');
+    $videoFeed.onload = null;
+
     $toggleBtn.className = 'btn-stream btn-stream--start';
     $toggleBtn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="currentColor">
@@ -185,9 +202,9 @@ function setStreamingUI(streaming) {
       Mulai Stream`;
     $controlHint.textContent = 'Tekan untuk memulai inferensi';
     $subtitleBar.classList.remove('active');
-    $subtitleText.textContent = 'Menunggu deteksi…';
+    $subtitleText.textContent = 'Menunggu deteksi\u2026';
     $detectionBadge.classList.remove('active');
-    $detectionLabel.textContent = '–';
+    $detectionLabel.textContent = '\u2013';
     resetStats();
     stopClock();
     setConnected(false);
