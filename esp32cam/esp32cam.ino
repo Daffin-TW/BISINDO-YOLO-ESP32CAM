@@ -617,7 +617,7 @@ float rawToVoltage(int raw) {
 
   // calibration fix
   vBat *= CALIBRATION_FACTOR;
-  return vBat;
+  return min(vBat, BATT_V_MAX);
 }
 
 // =============================================================================
