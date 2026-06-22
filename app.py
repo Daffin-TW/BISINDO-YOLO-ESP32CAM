@@ -29,6 +29,7 @@ from utils.config import (
     MODEL_PATH,
     CONFIDENCE_THRESHOLD,
     LABEL_SEND_COOLDOWN,
+    DETECTION_DWELL_TIME,
     INFERENCE_SKIP_FRAMES,
     FLASK_HOST,
     FLASK_PORT,
@@ -184,6 +185,10 @@ def _inference_loop() -> None:
     last_detections: list[dict] = []   # persisted between inference frames
     _last_sse_t:    float = 0.0        # perf_counter timestamp of last SSE push
     _sse_prev_label: str  = ""         # last label sent over SSE (detect changes)
+    
+    # Dwell time tracking
+    _candidate_id: int = 0
+    _candidate_start: float = 0.0
 
     # Lazy-load YOLO detector (heavy; only once per process lifetime)
     if _detector is None:
@@ -262,14 +267,23 @@ def _inference_loop() -> None:
 
         # ── Send label to ESP32-CAM ─────────────────────────────────────────
         if best_id > 0:
-            label_text = next(
-                (d["label"] for d in last_detections if d["label_id"] == best_id),
-                "",
-            )
-            with _lock:
-                _state["last_label"]    = label_text
-                _state["last_label_id"] = best_id
-            _send_label_to_esp32(best_id)
+            if best_id != _candidate_id:
+                # New gesture detected, start timer
+                _candidate_id = best_id
+                _candidate_start = time.time()
+            elif time.time() - _candidate_start >= DETECTION_DWELL_TIME:
+                # Gesture has been held long enough, accept it
+                label_text = next(
+                    (d["label"] for d in last_detections if d["label_id"] == best_id),
+                    "",
+                )
+                with _lock:
+                    _state["last_label"]    = label_text
+                    _state["last_label_id"] = best_id
+                _send_label_to_esp32(best_id)
+        else:
+            # No detection, reset candidate timer
+            _candidate_id = 0
 
         # ── Update shared state ─────────────────────────────────────────────
         with _lock:

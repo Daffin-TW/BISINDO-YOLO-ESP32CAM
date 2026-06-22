@@ -24,6 +24,10 @@ INFERENCE_SKIP_FRAMES = 1
 # (prevents flooding when the same sign stays in frame)
 LABEL_SEND_COOLDOWN = 1.0
 
+# Minimum seconds a gesture must be continuously detected before it is sent
+# (prevents triggering on transient/accidental movements)
+DETECTION_DWELL_TIME = 0.2
+
 # ── Flask server ──────────────────────────────────────────────────────────────
 FLASK_HOST  = "0.0.0.0"
 FLASK_PORT  = 5000
