@@ -13,7 +13,7 @@
 
 <br/>
 
-*Undergraduate Thesis Project — Department of Informatics*
+*Undergraduate Thesis Project — Department of Data Science*
 
 </div>
 
